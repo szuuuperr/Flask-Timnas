@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard Dataset Timnas</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f3f6f6; color: #1c2128; }
+    header { background: #0e3b3d; color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    h1 { font-size: 20px; margin: 0; }
+    main { padding: 24px; display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+    @media (max-width: 800px) { main { grid-template-columns: 1fr; } .stat { flex-direction: column; } }
+    .kartu { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .stat { display: flex; gap: 16px; grid-column: 1 / -1; }
+    .stat .kartu { flex: 1; }
+    .angka { font-size: 32px; font-weight: bold; color: #0f8f7e; }
+    .lebar { grid-column: 1 / -1; }
+    h2 { font-size: 15px; margin: 0 0 12px; }
+    .grafik { position: relative; height: 260px; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e5ecec; vertical-align: top; }
+    th { color: #556; font-weight: 600; }
+    .teks { max-width: 520px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Dashboard Dataset Timnas</h1>
+    <label>Kata kunci:
+      <select id="kataKunci">
+        <option value="">Semua</option>
+        {% for k in daftar_kata %}
+        <option value="{{ k }}">{{ k }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </header>
+
+  <main>
+    <section class="stat">
+      <div class="kartu"><div class="angka" id="totalPost">-</div>Total post</div>
+      <div class="kartu"><div class="angka" id="totalLike">-</div>Total like</div>
+      <div class="kartu"><div class="angka" id="rataLike">-</div>Rata-rata like</div>
+      <div class="kartu"><div class="angka" id="totalReply">-</div>Total reply</div>
+    </section>
+
+    <section class="kartu">
+      <h2>Jumlah post per kata kunci</h2>
+      <div class="grafik"><canvas id="grafikKata"></canvas></div>
+    </section>
+
+    <section class="kartu">
+      <h2>Tren post per tanggal</h2>
+      <div class="grafik"><canvas id="grafikTanggal"></canvas></div>
+    </section>
+
+    <section class="kartu lebar">
+      <h2>Top 5 post berdasarkan like</h2>
+      <div style="overflow:auto;">
+        <table>
+          <thead><tr><th>Tanggal</th><th>Kata kunci</th><th>Like</th><th>Reply</th><th>Repost</th><th class="teks">Teks</th></tr></thead>
+          <tbody id="tabelTop"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    Chart.defaults.maintainAspectRatio = false;
+    const grafik = {};
+
+    function gambar(id, config) {
+      if (grafik[id]) grafik[id].destroy();
+      grafik[id] = new Chart(document.getElementById(id), config);
+    }
+
+    async function muatData() {
+      const kata = document.getElementById("kataKunci").value;
+      const q = kata ? "?kata_kunci=" + encodeURIComponent(kata) : "";
+
+      const ringkasan = await (await fetch("/api/ringkasan" + q)).json();
+      document.getElementById("totalPost").textContent = ringkasan.total_post;
+      document.getElementById("totalLike").textContent = ringkasan.total_like;
+      document.getElementById("rataLike").textContent = ringkasan.rata_like;
+      document.getElementById("totalReply").textContent = ringkasan.total_reply;
+
+      const perKata = await (await fetch("/api/per-kata-kunci" + q)).json();
+      gambar("grafikKata", {
+        type: "bar",
+        data: {
+          labels: perKata.labels,
+          datasets: [{ label: "Jumlah post", data: perKata.data, backgroundColor: "#0f8f7e" }]
+        },
+        options: { plugins: { legend: { display: false } } }
+      });
+
+      const tren = await (await fetch("/api/tren-tanggal" + q)).json();
+      gambar("grafikTanggal", {
+        type: "line",
+        data: {
+          labels: tren.labels,
+          datasets: [{
+            label: "Jumlah post",
+            data: tren.data,
+            borderColor: "#0f8f7e",
+            backgroundColor: "rgba(15,143,126,0.15)",
+            fill: true,
+            tension: 0.2
+          }]
+        }
+      });
+
+      const top = await (await fetch("/api/top-post" + q)).json();
+      const tbody = document.getElementById("tabelTop");
+      tbody.innerHTML = top.data.map(r => `
+        <tr>
+          <td>${r.tanggal || ""}</td>
+          <td>${r.kata_kunci || ""}</td>
+          <td>${r.like_count}</td>
+          <td>${r.reply_count}</td>
+          <td>${r.repost_count}</td>
+          <td class="teks">${(r.text_clean || "").replace(/</g, "&lt;")}</td>
+        </tr>
+      `).join("");
+    }
+
+    document.getElementById("kataKunci").addEventListener("change", muatData);
+    muatData();
+  </script>
+</body>
+</html>

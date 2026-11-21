@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard Nilai Mahasiswa</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f3f6f6; color: #1c2128; }
+    header { background: #0e3b3d; color: #fff; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+    h1 { font-size: 20px; margin: 0; }
+    main { padding: 24px; display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+    @media (max-width: 700px) { main { grid-template-columns: 1fr; } .stat { flex-direction: column; } }
+    .kartu { background: #fff; border-radius: 10px; padding: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+    .stat { display: flex; gap: 16px; grid-column: 1 / -1; }
+    .stat .kartu { flex: 1; }
+    .angka { font-size: 32px; font-weight: bold; color: #0f8f7e; }
+    .lebar { grid-column: 1 / -1; }
+    h2 { font-size: 15px; margin: 0 0 12px; }
+    .grafik { position: relative; height: 240px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Dashboard Nilai Mahasiswa</h1>
+    <label>Angkatan:
+      <select id="angkatan">
+        <option value="">Semua</option>
+        {% for a in daftar_angkatan %}
+        <option value="{{ a }}">{{ a }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </header>
+
+  <main>
+    <section class="stat">
+      <div class="kartu"><div class="angka" id="mhs">-</div>Mahasiswa</div>
+      <div class="kartu"><div class="angka" id="rata">-</div>Rata-rata nilai</div>
+      <div class="kartu"><div class="angka" id="lulus">-</div>% nilai lulus (>= 55)</div>
+    </section>
+    <section class="kartu"><h2>Rata-rata nilai per prodi</h2><div class="grafik"><canvas id="grafikProdi"></canvas></div></section>
+    <section class="kartu"><h2>Distribusi nilai huruf</h2><div class="grafik"><canvas id="grafikGrade"></canvas></div></section>
+    <section class="kartu lebar"><h2>Tren rata-rata per semester</h2><div class="grafik"><canvas id="grafikTren"></canvas></div></section>
+  </main>
+
+  <script>
+    Chart.defaults.maintainAspectRatio = false; // ikuti tinggi .grafik
+    const grafik = {};
+
+    // Gambar ulang grafik: hapus yang lama, buat yang baru
+    function gambar(id, config) {
+      if (grafik[id]) grafik[id].destroy();
+      grafik[id] = new Chart(document.getElementById(id), config);
+    }
+
+    async function muatData() {
+      const angkatan = document.getElementById("angkatan").value;
+      const q = angkatan ? "?angkatan=" + angkatan : "";
+
+      const ringkasan = await (await fetch("/api/ringkasan" + q)).json();
+      document.getElementById("mhs").textContent = ringkasan.mahasiswa;
+      document.getElementById("rata").textContent = ringkasan.rata_rata;
+      document.getElementById("lulus").textContent = ringkasan.lulus + "%";
+
+      const prodi = await (await fetch("/api/rata-prodi" + q)).json();
+      gambar("grafikProdi", {
+        type: "bar",
+        data: { labels: prodi.labels,
+                datasets: [{ label: "Rata-rata nilai", data: prodi.data, backgroundColor: "#0f8f7e" }] },
+        options: { plugins: { legend: { display: false } } }
+      });
+
+      const grade = await (await fetch("/api/distribusi-grade" + q)).json();
+      gambar("grafikGrade", {
+        type: "doughnut",
+        data: { labels: grade.labels,
+                datasets: [{ data: grade.data,
+                             backgroundColor: ["#0f8f7e", "#5bc0a8", "#f2a93b", "#e4572e", "#6b7b88"] }] }
+      });
+
+      const tren = await (await fetch("/api/tren-semester" + q)).json();
+      gambar("grafikTren", {
+        type: "line",
+        data: { labels: tren.labels, datasets: tren.datasets }
+      });
+    }
+
+    document.getElementById("angkatan").addEventListener("change", muatData);
+    muatData();
+  </script>
+</body>
+</html>
